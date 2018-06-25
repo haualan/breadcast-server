@@ -62,13 +62,27 @@
             Status: Offline. Click on Present to start streaming
           </div>
 
-          <div class="btn-control-container btn-group btn-block btn-group-toggle btn-group-justified" data-toggle="buttons">
-            <a id="call" href="#" class="btn btn-lg btn-success">
+          <div class="btn-group-presenter btn-control-container btn-group btn-block btn-group-toggle btn-group-justified" data-toggle="buttons">
+            <a id="call" href="#" class="call btn btn-lg btn-success">
               <span class="glyphicon glyphicon-play"></span> Present </a>
-            <a id="viewer" href="#" class="btn btn-lg btn-primary">
-              <span class="glyphicon glyphicon-user"></span> Viewer</a>
-            <a id="terminate" href="#" class="btn btn-lg btn-danger">
-              <span class="glyphicon glyphicon-stop"></span> Stop</a>
+            <a id="switch-camera" href="#" class="switch-camera btn btn-lg btn-primary">
+              <span class="glyphicon glyphicon-refresh"></span> <span class="glyphicon glyphicon-camera"></span></a>
+            <a id="terminate" href="#" class="terminate btn btn-lg btn-danger">
+              <span class="glyphicon glyphicon-stop"></span> Stop / Reset</a>
+               
+          </div>
+
+<!--           <div class="btn-group-presenter btn-control-container btn-group btn-block btn-group-toggle btn-group-justified" data-toggle="buttons">
+            <a id="boot-channel" href="#" class="boot-channel btn btn-lg btn-danger">
+              <span class="glyphicon glyphicon-warning"></span> Reset Channel</a> 
+
+          </div> -->
+
+
+
+          <div class="btn-group-viewer btn-control-container btn-group btn-block btn-group-toggle btn-group-justified" data-toggle="buttons" style="display: none;">
+            <a id="viewer" href="#" class="viewer btn btn-lg btn-primary">
+              <span class="glyphicon glyphicon-user" ></span> Viewer</a>
           </div>
 
         </div>

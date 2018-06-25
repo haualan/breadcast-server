@@ -34,15 +34,68 @@ var ws = new WebSocket('wss://' + location.host + '/one2many?channel=' + qs.chan
 var video;
 var webRtcPeer;
 var channel = qs.channel
+var pkey = qs.pkey
+
+var isPresenting = false;
+
+var mediaConstraints;
+
+
+// var allFacingModes = ['user', 'environment']
+var isUserfacingMode =  false
 
 
 
 function initViewerMode() {
-	document.getElementById('call').style.display = 'none';
-	document.getElementById('terminate').style.display = 'none';
+	// document.getElementById('call').style.display = 'none';
+	// document.getElementById('terminate').style.display = 'none';
+	// document.getElementById('switch-camera').style.display = 'none';
+
+	// document.getElementById('viewer').style.display = 'table-cell';
+
+	console.log('init viewer mode')
 
 	document.getElementById('status-online').innerHTML = "Status: Streaming live. Click Viewer to begin"
 	document.getElementById('status-offline').innerHTML = "Status: Offline. No one is presenting now"
+
+	$('.btn-group-presenter').hide()
+	$('.btn-group-viewer').show()
+
+
+}
+
+
+
+//  switchCamera (for presenting via phone)
+function switchCamera(event) {
+	// body...
+
+  // var constraints = {
+  //   video: true,
+  //   audio: true
+  // };
+
+  if (isPresenting) {
+  	return window.alert('Stop the stream first before switching cameras.')
+  }
+
+  isUserfacingMode = !isUserfacingMode
+
+  return
+
+
+
+  // var constraints = { audio: true, video: { facingMode: { exact: "user" } } };
+
+  // navigator.mediaDevices
+  //   .getUserMedia(constraints)
+  //   .then(function(stream) {
+  //     video.srcObject = stream;
+  //   })
+  //   .catch(function(error) {
+  //     console.error(error);
+  //   });
+
 
 }
 
@@ -67,9 +120,12 @@ $( document ).ready(function() {
 	document.getElementById('call').addEventListener('click', function() { presenter(); } );
 	document.getElementById('viewer').addEventListener('click', function() { viewer(); } );
 	document.getElementById('terminate').addEventListener('click', function() { stop(); } );
+	document.getElementById('switch-camera').addEventListener('click', function() { switchCamera(); } );
 
-	// when ready, seek channel status
-	channelStatus()
+	// document.getElementById('boot-channel').addEventListener('click', function() { bootChannel(); } );
+
+
+
 
 
 
@@ -79,13 +135,23 @@ window.onbeforeunload = function() {
 	ws.close();
 }
 
+ws.onopen = function() {
+
+	// when ready, seek channel status
+	channelStatus()
+
+}
+
 ws.onmessage = function(message) {
 	var parsedMessage = JSON.parse(message.data);
-	console.info('Received message: ' + message.data);
+	console.info('Received message: ', message.data);
 
 	switch (parsedMessage.id) {
 	case 'channelStatus':
 		channelStatusResponse(parsedMessage);
+		break;
+	case 'bootChannelResponse':
+		bootChannelResponse(parsedMessage);
 		break;
 	case 'presenterResponse':
 		presenterResponse(parsedMessage);
@@ -116,9 +182,29 @@ function channelStatus() {
 
 }
 
+function bootChannel() {
+	// function to remove current presenter and all viewers
+	var message = {
+		id : 'bootChannel'
+	}
+	sendMessage(message);
+
+}
+
+function bootChannelResponse(message) {
+	if (message.response != 'accepted') {
+		var errorMsg = message.message ? message.message : 'Unknown error';
+		return checkPkey(errorMsg)
+	}
+
+	// if it is accepted, channel would be reset, nothing will need to be done.
+
+}
+
 function channelStatusResponse(message) {
 	console.log('channelStatusResponse', message)
-	var isPresenting = message.message.isPresenting;
+	isPresenting = message.message.isPresenting;
+	mediaConstraints = message.message.mediaConstraints;
 
 	// document.getElementById('status').innerHTML = isPresenting ? 'Online...': 'Offline'
 
@@ -127,15 +213,20 @@ function channelStatusResponse(message) {
 
 }
 
+function checkPkey(message){
+	// if message comes back to 'bad pkey, reinit user to viewer mode'
+	if (message == 'bad pkey') {
+			window.alert("Your presenter link has expired. Contact your IT administrator for a new link!")
+			initViewerMode()
+	}
+}
+
 
 function presenterResponse(message) {
 	if (message.response != 'accepted') {
-		var errorMsg = message.message ? message.message : 'Unknow error';
+		var errorMsg = message.message ? message.message : 'Unknown error';
 		console.warn('Call not accepted for the following reason: ' + errorMsg);
-		if (errorMsg == 'bad pkey') {
-			window.alert("Your presenter link has expired. Contact your IT administrator for a new link!")
-			initViewerMode()
-		}
+		checkPkey(errorMsg)
 		dispose();
 	} else {
 		webRtcPeer.processAnswer(message.sdpAnswer);
@@ -144,7 +235,7 @@ function presenterResponse(message) {
 
 function viewerResponse(message) {
 	if (message.response != 'accepted') {
-		var errorMsg = message.message ? message.message : 'Unknow error';
+		var errorMsg = message.message ? message.message : 'Unknown error';
 		console.warn('Call not accepted for the following reason: ' + errorMsg);
 		console.log(message)
 		dispose();
@@ -153,13 +244,19 @@ function viewerResponse(message) {
 	}
 }
 
+
 function presenter() {
 	if (!webRtcPeer) {
 		showSpinner(video);
 
 		var options = {
 			localVideo: video,
-			onicecandidate : onIceCandidate
+			onicecandidate : onIceCandidate,
+			mediaConstraints: mediaConstraints,
+	    }
+
+	    if (mediaConstraints.video) {
+	    	mediaConstraints.video = { facingMode: isUserfacingMode ? "user" : "environment" } 
 	    }
 
 		webRtcPeer = kurentoUtils.WebRtcPeer.WebRtcPeerSendonly(options, function(error) {
@@ -167,6 +264,7 @@ function presenter() {
 
 			this.generateOffer(onOfferPresenter);
 		});
+
 	}
 }
 
@@ -227,6 +325,12 @@ function stop() {
 		}
 		sendMessage(message);
 		dispose();
+		return
+	}
+
+	if (isPresenting && qs.pkey) {
+		bootChannel()
+		return
 	}
 }
 

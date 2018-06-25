@@ -242,7 +242,28 @@ wss.on('connection', function connection(ws, req) {
             break;
 
         case 'getChannelStatus':
-        	getChannelStatus(channelId, sessionId, ws)
+        	getChannelStatus(channelId, sessionId, ws);
+        	break;
+
+        case 'bootChannel':
+	        console.log('bootChannel');
+        	bootChannel(qs, channelId, sessionId, function(error, response) {
+        		if (error) {
+        			console.log('bootChannelResponse error')
+        			return ws.send(JSON.stringify({
+						id : 'bootChannelResponse',
+						response : 'rejected',
+						message : error
+					}));
+        		}
+
+        		ws.send(JSON.stringify({
+					id : 'bootChannelResponse',
+					response : 'accepted',
+				}));
+
+
+        	});
         	break;
 
         default:
@@ -309,6 +330,24 @@ function getKurentoClient(callback) {
     });
 }
 
+
+function bootChannel(qs, channelId, sessionId, callback) {
+	// kick all users out of channel
+
+	var channelId = qs.channel
+	var pkey = qs.pkey
+
+	if (!isAuthenticated(qs)) {
+		return callback("bad pkey")
+	}
+
+	// when user has authority, start kicking out user
+	return stopChannel(channelId)
+
+
+
+}
+
 function getChannelStatus(channelId, sessionId, ws) {
 	console.log('getChannelStatus', channelId, sessionId)
 
@@ -360,7 +399,8 @@ function startPresenter(qs, sessionId, ws, sdpOffer, callback) {
 	presenters[channelId] = {
 		id : sessionId,
 		pipeline : null,
-		webRtcEndpoint : null
+		webRtcEndpoint : null,
+		ws: ws,
 	}
 
 	presenter = presenters[channelId]
@@ -445,6 +485,8 @@ function startPresenter(qs, sessionId, ws, sdpOffer, callback) {
 
 
 
+
+
             });
         });
 	});
@@ -467,6 +509,8 @@ function broadcastChannelStatus(channelId) {
     	var subscriber = channelStatusSubscribers[channelId][i]
 
     	if (subscriber.ws) {
+
+    		if (subscriber.ws.readyState === ws.CLOSED) return
 
     		subscriber.ws.send(JSON.stringify({
 			    id : 'channelStatus',
@@ -564,6 +608,45 @@ function clearCandidatesQueue(sessionId) {
 }
 
 
+function stopChannel(channelId) {
+	// stop channel without checking for channelid
+	var presenter = presenters[channelId]
+	var viewers = viewersByChannel[channelId]
+
+	if (presenter && presenter !== null) {
+
+		
+		if (presenter.ws) {
+			presenter.ws.send(JSON.stringify({
+				id : 'stopCommunication'
+			}));
+		}
+
+		for (var i in viewers) {
+			console.log('stopChannel presenter stopping, clearing viewers', i)
+			var viewer = viewers[i];
+			if (viewer.ws) {
+				viewer.ws.send(JSON.stringify({
+					id : 'stopCommunication'
+				}));
+			}
+		}
+
+		presenter.pipeline.release();
+		presenter = null;
+
+		// remove presenter from server
+		delete presenters[channelId]
+		delete viewersByChannel[channelId]
+
+		// tell status indicators that there is no longer a presenter
+		broadcastChannelStatus(channelId)
+	}
+
+	// update viewersByChannel
+	viewersByChannel[channelId] = viewers
+
+}
 
 
 function stop(channelId, sessionId) {
@@ -647,12 +730,25 @@ function onIceCandidate(channelId, sessionId, _candidate) {
 
 function channelStatus(channelId) {
 	// returns a json with channel info
-
-	if (presenters[channelId]) {
-		return {"channel": channelId, "isPresenting": true}
+	var mediaConstraints;
+	if (presenterKeys[channelId]) {
+		mediaConstraints = presenterKeys[channelId].mediaConstraints
 	}
 
-	return {"channel": channelId, "isPresenting": false};
+	if (presenters[channelId]) {
+		return {
+			"channel": channelId, 
+			"isPresenting": true,
+			mediaConstraints: mediaConstraints,
+
+		}
+	}
+
+	return {
+		"channel": channelId, 
+		"isPresenting": false,
+		mediaConstraints: mediaConstraints,
+	};
 }
 
 app.use(
@@ -679,13 +775,29 @@ console.log('__dirname', path.join(__dirname, 'static'))
 // REST endpoint to indicate channel activity status
 
 presenterKeys = {
+	'BMCC': {
+		name: 'BMCC',
+		key: '789',
+		mediaConstraints: {
+			video: {},
+			audio: true,
+		},
+	},
 	'BMCC-English': {
 		name: 'BMCC English',
 		key: '789',
+		mediaConstraints: {
+			video: false,
+			audio: true,
+		},
 	},
 	'BMCC-Mandarin':{
 		name: 'BMCC Mandarin',
 		key: '123',
+		mediaConstraints: {
+			video: false,
+			audio: true,
+		},
 	},
 }
 
